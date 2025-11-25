@@ -1,0 +1,125 @@
+services:
+  traefik:
+    image: traefik:latest
+
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      #- "--entrypoints.websecure.address=:443"
+      #- "--certificatesresolvers.selfsigned.acme.tlschallenge=true"
+      #- "--certificatesresolvers.selfsigned.acme.email=tonemail@exemple.com"
+      #- "--certificatesresolvers.selfsigned.acme.storage=/letsencrypt/acme.json"
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.traefik.entrypoints=web"
+      - "traefik.http.routers.traefik.service=api@internal"
+      # - "traefik.http.routers.traefik.tls.certresolver=selfsigned"
+      - "traefik.http.routers.traefik.middlewares=traefik-auth"
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=admin:$$apr1$$z6r9jnvu$$hpHotq3y6XLAFZZXhRCNG0"
+
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+    ports: ["80:80", "443:443"]
+
+    networks: [web]
+
+  # --- LOGGING BACKEND ---
+  loki:
+    image: grafana/loki:3.0.0
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      # Mount your local config file into the container
+      - ./conf/loki/loki-config.yml:/etc/loki/local-config.yaml
+    networks: [web]
+
+  # --- METRICS (Prometheus + Node Exporter) ---
+  prometheus:
+    image: prom/prometheus:latest
+    # We enable remote-write-receiver so Alloy can push metrics to it
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-remote-write-receiver"
+    ports:
+      - "9090:9090"
+    networks: [web]
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    ports:
+      - "9100:9100"
+    networks: [web]
+
+  # --- VISUALIZATION ---
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks: [web]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.localhost`)"
+      - "traefik.http.routers.grafana.entrypoints=web"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+  # --- COLLECTOR (ALLOY) ---
+  grafana-alloy:
+    image: grafana/alloy:latest
+    # Alloy needs a command to start and load the config
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    volumes:
+      - ./conf/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # MOUNT THE SHARED LOG VOLUME (Read Only)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "12345:12345"
+    networks: [web]
+
+  ################
+  ### Services ###
+  ################
+  apache:
+    image: httpd:latest
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.apache.rule=Host(`apache.localhost`)"
+      - "traefik.http.routers.apache.entrypoints=web"
+      - "traefik.http.services.apache.loadbalancer.server.port=80"
+      - "my_service_name=apache"
+
+    volumes:
+      - ./index.html:/usr/local/apache2/htdocs/index.html:ro
+
+    networks: [web]
+
+  nginx:
+    image: nginx:stable
+    labels:
+      - "traefik.http.services.nginx.loadbalancer.server.port=80"
+      - "traefik.enable=true"
+      - "traefik.http.routers.nginx.rule=Host(`nginx.localhost`)"
+      - "traefik.http.routers.nginx.entrypoints=web"
+      # - "traefik.http.routers.nginx.tls.certresolver=selfsigned"
+      - "my_service_name=nginx"
+
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+
+    networks: [web]
+
+volumes:
+  grafana_data:
+  shared-logs: # This creates the volume common to Nginx and Alloy
+
+networks:
+  web:
+    external: false
