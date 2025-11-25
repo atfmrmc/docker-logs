@@ -1,8 +1,8 @@
+// Connect to Docker to discover containers
 discovery.docker "all_containers" {
     host = "unix:///var/run/docker.sock"
 }
 
-// 2. Filter and Relabel
 // We look for the label "my_service_name" that we added in docker-compose.
 // If a container has it, we use it as the "service_name" for Grafana.
 discovery.relabel "filter_logs" {
@@ -21,17 +21,14 @@ discovery.relabel "filter_logs" {
     }
 }
 
-// 3. Read the logs from the discovered containers
+// Read the logs from the discovered containers
 loki.source.docker "docker_logs" {
     host       = "unix:///var/run/docker.sock"
     targets    = discovery.relabel.filter_logs.output
     forward_to = [loki.write.local_loki.receiver]
-    
-    // We don't need the 'add_labels' processor anymore because 
-    // we captured the label directly from Docker above!
 }
 
-// 4. Send to Loki
+// Send to Loki
 loki.write "local_loki" {
     endpoint {
         url = "http://loki:3100/loki/api/v1/push"
@@ -40,14 +37,14 @@ loki.write "local_loki" {
 
 // --- METRICS CONFIGURATION (New) ---
 
-// 1. Define where to send metrics (Prometheus)
+// Define where to send metrics (Prometheus)
 prometheus.remote_write "local_prometheus" {
     endpoint {
         url = "http://prometheus:9090/api/v1/write"
     }
 }
 
-// 2. Scrape Node Exporter
+// Scrape Node Exporter
 prometheus.scrape "node_exporter_scraper" {
     targets = [
         { "__address__" = "node-exporter:9100" },

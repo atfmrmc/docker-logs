@@ -72,21 +72,20 @@ services:
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
 
   # --- COLLECTOR (ALLOY) ---
+
   grafana-alloy:
     image: grafana/alloy:latest
     # Alloy needs a command to start and load the config
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
     volumes:
       - ./conf/alloy/config.alloy:/etc/alloy/config.alloy:ro
-      # MOUNT THE SHARED LOG VOLUME (Read Only)
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "12345:12345"
     networks: [web]
 
-  ################
-  ### Services ###
-  ################
+  # --- SERVICES ---
+
   apache:
     image: httpd:latest
     labels:
@@ -118,7 +117,6 @@ services:
 
 volumes:
   grafana_data:
-  shared-logs: # This creates the volume common to Nginx and Alloy
 
 networks:
   web:
