@@ -20,6 +20,7 @@ services:
       # - "traefik.http.routers.traefik.tls.certresolver=selfsigned"
       - "traefik.http.routers.traefik.middlewares=traefik-auth"
       - "traefik.http.middlewares.traefik-auth.basicauth.users=admin:$$apr1$$z6r9jnvu$$hpHotq3y6XLAFZZXhRCNG0"
+      - "my_service_name=traefik"
 
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
@@ -32,13 +33,13 @@ services:
   loki:
     image: grafana/loki:3.0.0
     command: -config.file=/etc/loki/local-config.yaml
+    labels:
+      - "my_service_name=loki"
+    volumes:
+      - ./conf/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
     ports:
       - "3100:3100"
-    volumes:
-      # Mount your local config file into the container
-      - ./conf/loki/loki-config.yml:/etc/loki/local-config.yaml
     networks: [web]
-
   # --- METRICS (Prometheus + Node Exporter) ---
   prometheus:
     image: prom/prometheus:latest
@@ -52,6 +53,8 @@ services:
 
   node-exporter:
     image: prom/node-exporter:latest
+    labels:
+      - "my_service_name=node-exporter"
     ports:
       - "9100:9100"
     networks: [web]
@@ -70,6 +73,7 @@ services:
       - "traefik.http.routers.grafana.rule=Host(`grafana.localhost`)"
       - "traefik.http.routers.grafana.entrypoints=web"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      - "my_service_name=grafana"
 
   # --- COLLECTOR (ALLOY) ---
 
@@ -77,6 +81,8 @@ services:
     image: grafana/alloy:latest
     # Alloy needs a command to start and load the config
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    labels:
+      - "my_service_name=alloy"
     volumes:
       - ./conf/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro

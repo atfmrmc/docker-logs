@@ -8,13 +8,25 @@ discovery.docker "all_containers" {
 discovery.relabel "filter_logs" {
     targets = discovery.docker.all_containers.targets
 
-    // Rule: Look for docker label "com.docker.compose.service" or your custom label
+    // --- FIX 1: The Safety Net ---
+    // Always attach the Docker Container Name. 
+    // This ensures NO log is ever sent "naked" (without labels).
+    rule {
+        source_labels = ["__meta_docker_container_name"]
+        regex         = "/(.*)" // Remove the leading slash from the name
+        target_label  = "container"
+    }
+
+    // --- FIX 2: Your Custom Service Label ---
+    // We try to grab the 'my_service_name' label.
     rule {
         source_labels = ["__meta_docker_container_label_my_service_name"]
         target_label  = "service_name"
     }
-
-    // Optional: Keep only containers that HAVE this label (ignore noisy system containers)
+    
+    // Optional: Only keep containers that actually HAVE a service name?
+    // If you remove the lines below, you will see logs from Traefik/Loki/etc too.
+    // If you keep them, ensure you ran 'docker-compose up -d' to apply labels.
     rule {
         source_labels = ["__meta_docker_container_label_my_service_name"]
         action        = "keep"
